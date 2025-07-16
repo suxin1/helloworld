@@ -58,7 +58,7 @@ jobs:
           echo "PACKAGES=" >> $GITHUB_ENV  # 置空以构建所有包
 
       - name: Build
-        uses: immortalwrt/gh-action-sdk@v5
+        uses: openwrt/gh-action-sdk@main
         env:
           ARCH: ${{ matrix.arch }}
           FEEDNAME: packages_ci
