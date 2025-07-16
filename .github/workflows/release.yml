@@ -58,7 +58,7 @@ jobs:
           echo "PACKAGES=" >> $GITHUB_ENV  # 置空以构建所有包
 
       - name: Build
-        uses: openwrt/gh-action-sdk@main
+        uses: openwrt/gh-action-sdk@23.05
         env:
           ARCH: ${{ matrix.arch }}
           FEEDNAME: packages_ci
