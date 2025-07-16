@@ -1,0 +1,114 @@
+name: Release Build
+
+on:
+  push:
+    branches:
+      - master  # 发布到master分支时触发
+    paths-ignore:
+      - '**.md'
+
+jobs:
+  build:
+    name: Build ${{ matrix.arch }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: arm_cortex-a9_vfpv3-d16
+            target: mvebu-cortexa9
+          - arch: mips_24kc
+            target: ath79-generic
+          - arch: mipsel_24kc
+            target: mt7621
+          - arch: aarch64_cortex-a53
+            target: mvebu-cortexa53
+          - arch: arm_cortex-a15_neon-vfpv4
+            target: armvirt-32
+          - arch: i386_pentium-mmx
+            target: x86-geode
+          - arch: x86_64
+            target: x86-64
+
+    steps:
+      - name: Free Disk Space
+        uses: jlumbroso/free-disk-space@main
+        with:
+          tool-cache: true
+          android: true
+          dotnet: true
+          haskell: true
+          large-packages: true
+          docker-images: true
+          swap-storage: true
+
+      - uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+
+      - name: Determine branch name
+        run: |
+          BRANCH="${GITHUB_REF#refs/heads/}"
+          echo "Building for $BRANCH"
+          echo "BRANCH=$BRANCH" >> $GITHUB_ENV
+
+      - name: Build all packages
+        run: |
+          echo "Building ALL packages for release"
+          echo "PACKAGES=" >> $GITHUB_ENV  # 置空以构建所有包
+
+      - name: Build
+        uses: immortalwrt/gh-action-sdk@v5
+        env:
+          ARCH: ${{ matrix.arch }}
+          FEEDNAME: packages_ci
+          V: s
+
+      - name: Move created packages to project dir
+        run: |
+          mkdir -p artifacts/${{ matrix.arch }}
+          find bin/packages/${{ matrix.arch }}/packages_ci/ -name "*.ipk" -exec cp {} artifacts/${{ matrix.arch }} \;
+          ls -lh artifacts/${{ matrix.arch }}
+
+      - name: Collect metadata
+        run: |
+          MERGE_ID=$(git rev-parse --short HEAD)
+          echo "MERGE_ID=$MERGE_ID" >> $GITHUB_ENV
+          echo "ARCHIVE_NAME=release-${{matrix.arch}}-$MERGE_ID" >> $GITHUB_ENV
+
+      - name: Generate release metadata
+        run: |
+          cat << _EOF_ > PKG-INFO
+          Metadata-Version: 2.1
+          Name: ${{env.ARCHIVE_NAME}}
+          Version: $BRANCH
+          Author: $GITHUB_ACTOR
+          Home-page: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY
+          Download-URL: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/releases/tag/$BRANCH
+          Summary: Full package release
+          Platform: ${{ matrix.arch }}
+
+          Full package release for ImmortalWrt $BRANCH (${{ matrix.arch }})
+          Build commit: $MERGE_ID
+          Build date: $(date -u +"%Y-%m-%dT%H:%M:%SZ")
+
+          Includes all packages for ${{ matrix.target }} target.
+          _EOF_
+
+          echo "Package listing:" >> PKG-INFO
+          find artifacts/${{ matrix.arch }} -name "*.ipk" -printf "  - %f\n" >> PKG-INFO
+          cat PKG-INFO
+
+      - name: Store release packages
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{env.ARCHIVE_NAME}}-packages
+          path: |
+            artifacts/${{ matrix.arch }}/*.ipk
+            PKG-INFO
+
+      - name: Store build logs
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{env.ARCHIVE_NAME}}-logs
+          path: logs/
